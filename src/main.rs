@@ -1,6 +1,6 @@
 #![feature(custom_derive, decl_macro, plugin)]
 #![plugin(rocket_codegen)]
- 
+
 extern crate activitypub;
 extern crate colored;
 extern crate diesel;
@@ -20,11 +20,31 @@ extern crate serde_json;
 extern crate webfinger;
 
 use rocket_contrib::Template;
+use rocket_contrib::tera::{GlobalFn, from_value, to_value, Error};
 use rocket_csrf::CsrfFairingBuilder;
+use std::collections::HashMap;
 
 mod inbox;
 mod setup;
 mod routes;
+
+/// Global url_for function used in Tera templates.
+/// Renders Rocket route endpoint names to their respective URI.
+/// Note: Tera escapes HTML content received from global functions, so `/` is escaped.
+/// Note: **Duplicate route function names are overwritten.**
+fn make_url_for(routes_map: HashMap<String, String>) -> GlobalFn {
+    // Teras GlobalFn expects a Boxed closure which returns a Result<Value>.
+    // TODO: figure out how to handle URI segments (variables in route paths)
+    Box::new(move |args: HashMap<String, serde_json::Value>| -> Result<serde_json::Value, Error> {
+        match args.get("name") {
+            Some(val) => match from_value::<String>(val.clone()) {
+                Ok(v) => Ok(to_value(routes_map.get(&v).unwrap_or(&"/".to_string())).unwrap()),
+                Err(_) => Err("name key/value could not be parsed!".into()),
+            },
+            None => Err("key 'name' does not exist".into()),
+        }
+    })
+}
 
 fn main() {
     let pool = setup::check();
@@ -94,8 +114,28 @@ fn main() {
             routes::errors::server_error
         ])
         .manage(pool)
-        .attach(Template::custom(|engines| {
-            rocket_i18n::tera(&mut engines.tera);
+        .attach(rocket::fairing::AdHoc::on_attach(|rocket| {
+            // Create a HashMap of routes with their name and URI and pass the url_for
+            // function with this map to Tera. The function can then be called in Tera
+            // templates to render route URIs from their function name.
+            // This Fairing is executed as soon as `.attach` is called on it.
+            let mut routes_map = HashMap::new();
+            for route in rocket.routes() {
+                match route.name {
+                    Some(name) => { routes_map.insert(name.to_string(), route.uri.to_string()); },
+                    None => { println!("No name for route URI {}", route.uri) }
+                }
+            }
+
+            // Now that we have the map, attach the Template customization function,
+            // apply rocket_i18n and register the global function.
+            // Returns the modified Rocket instance which must be wrapped into Result below.
+            let rocket = rocket.attach(Template::custom(move |engines| {
+                rocket_i18n::tera(&mut engines.tera);
+                engines.tera.register_global_function("url_for", make_url_for(routes_map.clone()));
+            }));
+
+            Ok(rocket)
         }))
         .attach(rocket_i18n::I18n::new("plume"))
         .attach(CsrfFairingBuilder::new()
@@ -106,5 +146,6 @@ fn main() {
 
                 ])
                 .finalize().unwrap())
+
         .launch();
 }
