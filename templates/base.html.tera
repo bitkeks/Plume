@@ -3,7 +3,7 @@
     <head>
         <meta charset="utf-8" />
         <title>{% block title %}{% endblock title %} ⋅ {{ "Plume" | _ }}</title>
-        <meta name="viewport" content="width=device-width, initial-scale=1" />        
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
         <link rel="stylesheet" href="/static/main.css" />
         <link rel="stylesheet" href="/static/fontawesome-5.0.10/css/fontawesome-all.min.css" />
     </head>
@@ -18,9 +18,9 @@
             </nav>
             <nav>
                 {% if account %}
-                    <a href="/dashboard">{{ "Dashboard" | _ }}</a>
+                    <a href="{{ url_for(name="dashboard") }}">{{ "Dashboard" | _ }}</a>
                     <a href="/notifications">{{ "Notifications" | _ }}</a>
-                    <a href="/me">{{ "My account" | _ }}</a>
+                    <a href="{{ url_for(name="me") }}">{{ "My account" | _ }}</a>
                     <a href="/logout">{{ "Log Out" | _ }}</a>
                 {% else %}
                     <a href="/login">{{ "Log In" | _ }}</a>

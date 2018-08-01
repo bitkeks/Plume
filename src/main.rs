@@ -37,9 +37,14 @@ fn make_url_for(routes_map: HashMap<String, String>) -> GlobalFn {
     // TODO: figure out how to handle URI segments (variables in route paths)
     Box::new(move |args: HashMap<String, serde_json::Value>| -> Result<serde_json::Value, Error> {
         match args.get("name") {
-            Some(val) => match from_value::<String>(val.clone()) {
-                Ok(v) => Ok(to_value(routes_map.get(&v).unwrap_or(&"/".to_string())).unwrap()),
-                Err(_) => Err("name key/value could not be parsed!".into()),
+            Some(endpoint) => {
+                match from_value::<String>(endpoint.clone()) {
+                    Ok(v) => {
+                        let uri = routes_map.get(&v).expect("Error while unpacking URI from endpoint name");
+                        Ok(to_value(uri).unwrap())
+                    },
+                    Err(_) => Err("name key/value could not be parsed!".into()),
+                }
             },
             None => Err("key 'name' does not exist".into()),
         }
